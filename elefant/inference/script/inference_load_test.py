@@ -2,6 +2,8 @@
 
 import asyncio
 import logging
+import os
+import sys
 import time
 
 
@@ -10,7 +12,7 @@ import numpy as np
 
 # Assuming the proto generated files are accessible, adjust path if needed
 from elefant.data.proto import video_inference_pb2
-from elefant.inference.unix_socket_server import UDS_PATH
+from elefant.inference.unix_socket_server import UDS_PATH, DEFAULT_TCP_HOST, DEFAULT_TCP_PORT
 
 logging.basicConfig(level=logging.INFO, force=True)
 
@@ -40,10 +42,27 @@ async def frame_generator():
         await asyncio.sleep(FRAME_SLEEP_TIME)
 
 
-async def run_client(uds_path: str = UDS_PATH) -> None:
+async def run_client(
+    uds_path: str = UDS_PATH,
+    host: str = None,
+    port: int = None,
+    use_tcp: bool = None,
+) -> None:
     """Connect to the server, send frames and log the response FPS."""
-    # logging.info(f"Connecting to server at {uds_path}...")
-    reader, writer = await asyncio.open_unix_connection(uds_path)
+    # Determine connection type
+    if use_tcp is None:
+        use_tcp = sys.platform == "win32" or os.getenv("USE_TCP") == "1"
+    
+    if use_tcp:
+        # TCP connection
+        host = host or os.getenv("INFERENCE_HOST", DEFAULT_TCP_HOST)
+        port = port or int(os.getenv("INFERENCE_PORT", str(DEFAULT_TCP_PORT)))
+        logging.info(f"Connecting to TCP server at {host}:{port}...")
+        reader, writer = await asyncio.open_connection(host, port)
+    else:
+        # Unix domain socket connection
+        logging.info(f"Connecting to Unix domain socket at {uds_path}...")
+        reader, writer = await asyncio.open_unix_connection(uds_path)
 
     start_time = time.time()
     frames_processed = 0
@@ -104,8 +123,9 @@ async def run_client(uds_path: str = UDS_PATH) -> None:
 
 def _main() -> None:
     uds_path = UDS_PATH
+    use_tcp = sys.platform == "win32" or os.getenv("USE_TCP") == "1"
     try:
-        asyncio.run(run_client(uds_path))
+        asyncio.run(run_client(uds_path=uds_path, use_tcp=use_tcp))
     except KeyboardInterrupt:
         logging.info("Client interrupted by user.")
 

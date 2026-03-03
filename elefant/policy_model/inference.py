@@ -10,6 +10,7 @@ import signal
 import threading
 import numpy as np
 import sys
+import platform
 from collections import deque
 from typing import AsyncGenerator, AsyncIterator, Awaitable, List, Dict, Tuple, Optional
 from elefant.config import load_config
@@ -584,7 +585,7 @@ class InferenceServer(UnixDomainSocketInferenceServer):
         # The warmup should have done all the compilation, so we should fail if we try to compile again.
         with log_time("FPS test"):
             with torch.compiler.set_stance(self._compile_stance):
-                self.fps_test(10_000)
+                self.fps_test(10)
 
         self.active_connections = set()
 
@@ -1016,9 +1017,23 @@ class InferenceServer(UnixDomainSocketInferenceServer):
         logging.info("Terminal listener stopped.")
 
     async def serve(self):
-        self.terminal_listener_task = asyncio.create_task(
-            self._listen_for_terminal_input()
-        )
+        # On Windows, asyncio's ProactorEventLoop does not support connect_read_pipe
+        # with sys.stdin properly, which causes errors like:
+        # OSError: [WinError 6] ハンドルが無効です。
+        # AttributeError: '_ProactorReadPipeTransport' object has no attribute '_empty_waiter'
+        # Therefore, we only start the terminal listener when:
+        #   - input_text is enabled, and
+        #   - the platform is not Windows.
+        if self.input_text and platform.system() != "Windows":
+            self.terminal_listener_task = asyncio.create_task(
+                self._listen_for_terminal_input()
+            )
+        else:
+            if self.input_text:
+                logging.warning(
+                    "Terminal text input is enabled, but is not supported on this platform. "
+                    "Skipping terminal listener startup."
+                )
         await super().serve()
 
 

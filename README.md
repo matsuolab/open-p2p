@@ -126,6 +126,21 @@ Validation results (perplexity) are reported to **Weights & Biases**.
 
 > **Note:** Inference can run on Linux without a display, but real-time game interaction requires a Windows machine with Recap.
 
+#### Windows Native Support (New!)
+
+**Windows環境でWSLなしで推論サーバーを実行できます！**
+
+Windows環境では自動的にTCPソケット（localhost）を使用します。詳細は `WINDOWS_SETUP.md` を参照してください。
+
+```powershell
+# Windows環境での推論サーバー起動（TCP自動）
+uv run elefant/policy_model/inference.py `
+  --config checkpoints/150M/model_config.yaml `
+  --checkpoint_path checkpoints/150M/checkpoint-step=00500000.ckpt
+```
+
+#### Linux環境（従来通り）
+
 First, log in to Hugging Face (required for Gemma tokenizer authentication):
 ```bash
 uv run huggingface-cli login
@@ -143,6 +158,15 @@ To verify the code works without downloading weights:
 uv run elefant/policy_model/inference.py \
   --config config/policy_model/150M.yaml \
   --use_random_weights
+```
+
+#### 環境変数による接続方式の切り替え
+
+```bash
+# Linux環境でTCPを使用（明示的）
+USE_TCP=1 INFERENCE_PORT=9999 uv run elefant/policy_model/inference.py \
+  --config checkpoints/150M/model_config.yaml \
+  --checkpoint_path checkpoints/150M/checkpoint-step=00500000.ckpt
 ```
 
 ---
