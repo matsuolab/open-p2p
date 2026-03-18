@@ -2,10 +2,8 @@ from typing import Optional, List, Literal
 
 import pydantic
 from elefant.config import ConfigBase
-from elefant.data import (
-    RandAugmentationConfig,
-    UniversalAutoregressiveActionMappingConfig,
-)
+from elefant.data.dataset_config import RandAugmentationConfig
+from elefant.data.action_mapping import UniversalAutoregressiveActionMappingConfig
 from elefant.config import WandbConfig
 from elefant.im_tokenizer.config import ImageTokenizerConfig
 from elefant.text_tokenizer.config import TextTokenizerConfig

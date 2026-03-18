@@ -47,7 +47,7 @@ dependencies = [
     "tensorboard>=2.19.0",
     "torch-tb-profiler>=0.4.3; sys_platform != 'darwin'",
     "einops==0.8.0",
-    "elefant_rust",
+    "elefant_rust; sys_platform != 'win32'",
     "python-fasthtml>=0.12.6",
     "monsterui>=1.0.11",
     "triton; sys_platform == 'linux'",
@@ -75,9 +75,9 @@ simulator = [
 
 [tool.uv]
 environments = [
-    "sys_platform == 'linux' and platform_machine == 'x86_64'",
-    "sys_platform == 'win32' and platform_machine == 'x86_64'",
-    "sys_platform == 'darwin'",
+  "sys_platform == 'win32' and (platform_machine == 'AMD64' or platform_machine == 'x86_64')",
+  "sys_platform == 'linux' and platform_machine == 'x86_64'",
+  "sys_platform == 'darwin'",
 ]
 
 [tool.uv.sources]

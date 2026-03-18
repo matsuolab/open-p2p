@@ -2,9 +2,9 @@ from typing import Optional
 
 try:
     from torchcodec.decoders import VideoDecoder
-except RuntimeError:
+except (RuntimeError, ImportError):
     # Allow importing this file even if torchcodec is not installed.
-    pass
+    VideoDecoder = None
 from elefant.data.rescale.resize import resize_image_for_model
 from elefant.ffmpeg import (
     FFmpegEncoder,

@@ -1,9 +1,19 @@
-from typing import Tuple
-import torch
 import ctypes
-import numpy as np
-import elefant_rust
+from functools import lru_cache
+from typing import Tuple
+
+import torch
 import torchvision.transforms.functional as F
+from torchvision.transforms import InterpolationMode
+
+
+@lru_cache(maxsize=1)
+def _get_rust_module():
+    try:
+        import elefant_rust
+    except ImportError:
+        return None
+    return elefant_rust
 
 
 def _canonical_resize(im: torch.Tensor, exp_dim: Tuple[int, int]) -> torch.Tensor:
@@ -20,6 +30,18 @@ def _canonical_resize(im: torch.Tensor, exp_dim: Tuple[int, int]) -> torch.Tenso
     ptr = im_hwc.data_ptr()
     num_bytes = im_hwc.numel() * im_hwc.element_size()
     im_bytes_in = ctypes.string_at(ptr, num_bytes)
+
+    elefant_rust = _get_rust_module()
+    if elefant_rust is None:
+        resized_im = F.resize(
+            im,
+            list(exp_dim),
+            interpolation=InterpolationMode.BILINEAR,
+            antialias=True,
+        )
+        if resized_im.dtype != torch.uint8:
+            resized_im = resized_im.round().clamp(0, 255).to(torch.uint8)
+        return resized_im
 
     resized_im = elefant_rust.resize_image(im_bytes_in, *im.shape[1:], *exp_dim)
 

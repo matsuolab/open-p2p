@@ -8,13 +8,9 @@ import fsspec
 from torch import nn
 import torch.nn.functional as F
 import torch.optim as optim
-from elefant.data import (
-    ActionLabelVideoProtoDataset,
-    ActionLabelVideoProtoDatasetConfig,
-    UniversalAutoregressiveActionMapping,
-    DummyDataset,
-    DummyDatasetConfig,
+from elefant.data.action_mapping import (
     StructuredAction,
+    UniversalAutoregressiveActionMapping,
 )
 from elefant.text_tokenizer.config import TextTokenizerConfig
 from elefant.data.rand_augment import BatchRandAugment
@@ -33,7 +29,6 @@ from elefant.torch import (
     _sample_from_logits_gpu,
 )
 from elefant.torch import count_model_parameters
-from elefant.data.action_mapping import UniversalAutoregressiveActionMapping
 from elefant.metrics import LossMetric
 from elefant.policy_model.config import DatasetConfig, ValidationDatasetConfig
 from lightning.fabric.utilities.cloud_io import get_filesystem
@@ -1090,6 +1085,11 @@ class SupervisedDataModule(pl.LightningDataModule):
         )
 
     def _init_train_dataset(self):
+        from elefant.data.action_label_video_proto_dataset import (
+            ActionLabelVideoProtoDataset,
+            ActionLabelVideoProtoDatasetConfig,
+        )
+
         return ActionLabelVideoProtoDataset(
             ActionLabelVideoProtoDatasetConfig(
                 frame_height=self.cfg.shared.frame_height,
@@ -1118,6 +1118,8 @@ class SupervisedDataModule(pl.LightningDataModule):
         )
 
     def _init_dummy_dataset(self):
+        from elefant.data.dummy_dataset import DummyDataset, DummyDatasetConfig
+
         return DummyDataset(
             DummyDatasetConfig(
                 frame_height=self.cfg.shared.frame_height,
@@ -1162,6 +1164,11 @@ class SupervisedDataModule(pl.LightningDataModule):
 
         self.validation_datasets = {}
         for i, validation_dataset_cfg in enumerate(self.validation_dataset_cfgs):
+            from elefant.data.action_label_video_proto_dataset import (
+                ActionLabelVideoProtoDataset,
+                ActionLabelVideoProtoDatasetConfig,
+            )
+
             validation_dataset = ActionLabelVideoProtoDataset(
                 ActionLabelVideoProtoDatasetConfig(
                     frame_height=self.cfg.shared.frame_height,

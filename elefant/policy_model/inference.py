@@ -30,7 +30,7 @@ from elefant.policy_model.stage3_finetune import (
 )
 from elefant.torch import pytorch_setup
 from elefant.policy_model.config import LightningPolicyConfig
-from elefant.data.video_proto_dataset import resize_image_for_model
+from elefant.data.rescale.resize import resize_image_for_model
 from elefant.data.proto import shared_pb2
 import collections
 from PIL import Image
