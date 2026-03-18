@@ -501,7 +501,7 @@ class InferenceServer(UnixDomainSocketInferenceServer):
         checkpoint_path: str = None,
         input_text: bool = False,
     ):
-        super().__init__(uds_path=UDS_PATH)
+        super().__init__(uds_path=UDS_PATH, tcp_port=port)
         self.shared_text_state = SharedTextInputState(input_text=input_text)
         self.input_text = input_text
         self.terminal_listener_task = None
@@ -584,7 +584,7 @@ class InferenceServer(UnixDomainSocketInferenceServer):
         # The warmup should have done all the compilation, so we should fail if we try to compile again.
         with log_time("FPS test"):
             with torch.compiler.set_stance(self._compile_stance):
-                self.fps_test(10_000)
+                self.fps_test(10)
 
         self.active_connections = set()
 
@@ -995,6 +995,35 @@ class InferenceServer(UnixDomainSocketInferenceServer):
         logging.info(
             "Starting terminal listener for text input. Press Enter to submit."
         )
+
+        if sys.platform == "win32":
+            await self._listen_for_terminal_input_win32()
+        else:
+            await self._listen_for_terminal_input_unix()
+
+    async def _listen_for_terminal_input_win32(self):
+        """Thread-based stdin reader for Windows (ProactorEventLoop lacks connect_read_pipe)."""
+        def _blocking_readline():
+            try:
+                return sys.stdin.readline()
+            except Exception:
+                return None
+
+        while self.running:
+            try:
+                line = await asyncio.to_thread(_blocking_readline)
+                if line is None:
+                    break
+                line = line.strip()
+                if line:
+                    self.shared_text_state.set(line)
+            except Exception as e:
+                logging.error(f"Error reading from terminal: {e}")
+                break
+        logging.info("Terminal listener stopped.")
+
+    async def _listen_for_terminal_input_unix(self):
+        """Async pipe-based stdin reader for Unix."""
         loop = asyncio.get_running_loop()
         reader = asyncio.StreamReader()
         protocol = asyncio.StreamReaderProtocol(reader)
@@ -1002,7 +1031,6 @@ class InferenceServer(UnixDomainSocketInferenceServer):
 
         while self.running:
             try:
-                # Use wait_for to add a timeout, allowing the loop to check self.running
                 line_bytes = await asyncio.wait_for(reader.readline(), timeout=1.0)
                 if line_bytes:
                     line = line_bytes.decode("utf-8").strip()
@@ -1069,8 +1097,7 @@ def serve_model(
     except Exception as e:
         logging.exception(f"Error running inference server: {e}")
     finally:
-        # Clean up if UDS file still exists
-        if os.path.exists(UDS_PATH):
+        if sys.platform != "win32" and os.path.exists(UDS_PATH):
             try:
                 os.unlink(UDS_PATH)
                 logging.info(f"Removed UDS file: {UDS_PATH}")

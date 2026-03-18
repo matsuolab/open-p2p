@@ -3,44 +3,71 @@ import asyncio
 import logging
 import os
 import signal
+import sys
 
 from elefant.data.proto import video_inference_pb2
 
 
 UDS_PATH = "/tmp/uds.recap"
+_DEFAULT_TCP_HOST = "127.0.0.1"
+_DEFAULT_TCP_PORT = 8089
 
 
 class UnixDomainSocketInferenceServer(abc.ABC):
-    """Base class for inference servers that communicate over a Unix domain socket."""
+    """Base class for inference servers that communicate over a Unix domain socket.
+    On Windows, falls back to TCP since asyncio UDS is not supported."""
 
-    def __init__(self, uds_path: str = UDS_PATH):
+    def __init__(self, uds_path: str = UDS_PATH, tcp_port: int = _DEFAULT_TCP_PORT):
         self.uds_path = uds_path
+        self.tcp_port = tcp_port
         self.server: asyncio.AbstractServer | None = None
         self.shutdown_event = asyncio.Event()
         self.running = True
+        self._use_tcp = sys.platform == "win32"
 
     async def _start_server(self) -> None:
-        try:
-            os.unlink(self.uds_path)
-        except OSError:
-            if os.path.exists(self.uds_path):
-                raise OSError(
-                    f"Could not remove existing UDS file {self.uds_path}. Please remove it manually."
-                )
-        self.server = await asyncio.start_unix_server(
-            self._handle_client, self.uds_path, limit=200000
-        )
-        os.chmod(self.uds_path, 0o777)
-        logging.info(f"Server started on {self.uds_path}")
+        if self._use_tcp:
+            self.server = await asyncio.start_server(
+                self._handle_client,
+                _DEFAULT_TCP_HOST,
+                self.tcp_port,
+                limit=200000,
+            )
+            logging.info(
+                f"Server started on tcp://{_DEFAULT_TCP_HOST}:{self.tcp_port}"
+            )
+        else:
+            try:
+                os.unlink(self.uds_path)
+            except OSError:
+                if os.path.exists(self.uds_path):
+                    raise OSError(
+                        f"Could not remove existing UDS file {self.uds_path}. Please remove it manually."
+                    )
+            self.server = await asyncio.start_unix_server(
+                self._handle_client, self.uds_path, limit=200000
+            )
+            os.chmod(self.uds_path, 0o777)
+            logging.info(f"Server started on {self.uds_path}")
 
     async def serve(self) -> None:
         loop = asyncio.get_running_loop()
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, lambda: asyncio.create_task(self.shutdown()))
+        if sys.platform == "win32":
+            signal.signal(signal.SIGINT, lambda s, f: self._request_shutdown())
+            signal.signal(signal.SIGTERM, lambda s, f: self._request_shutdown())
+        else:
+            for sig in (signal.SIGINT, signal.SIGTERM):
+                loop.add_signal_handler(
+                    sig, lambda: asyncio.create_task(self.shutdown())
+                )
 
         await self._start_server()
         await self.shutdown_event.wait()
         await self.shutdown()
+
+    def _request_shutdown(self) -> None:
+        self.running = False
+        self.shutdown_event.set()
 
     async def shutdown(self) -> None:
         self.running = False
@@ -48,7 +75,7 @@ class UnixDomainSocketInferenceServer(abc.ABC):
         if self.server:
             self.server.close()
             await self.server.wait_closed()
-        if os.path.exists(self.uds_path):
+        if not self._use_tcp and os.path.exists(self.uds_path):
             try:
                 os.unlink(self.uds_path)
             except OSError:
